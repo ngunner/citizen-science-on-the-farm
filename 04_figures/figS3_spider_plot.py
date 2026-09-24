@@ -6,9 +6,9 @@ Added at packaging (September 2026). The original spider plot was produced inter
 no script survived, so this file re-creates it from the shipped data
 (`../data/top_bottom_30/counties_enriched_with_usda_data.csv`, produced by fetch_usda_nass_acres.py).
 Six axes, each min–max scaled to 0–1 across the 60 counties; heavy line = group mean, faint lines =
-individual counties. Axis choices follow the Figure S3 caption (Development, Nature/Forest, Pop
-Density (log), Industrial Monoculture = corn acres harvested) plus observation density (log) and
-farmland coverage; confirm against the published figure before reuse.
+individual counties. Axes match the published figure: Development (% land), Industrial Monoculture
+(corn acres), Ag Intensity (% land), Nature/Forest (% land), Crop Diversity (vegetable acres),
+Pop Density (log scale).
 """
 import os
 import numpy as np
@@ -18,13 +18,13 @@ import matplotlib.pyplot as plt
 HERE = os.path.dirname(os.path.abspath(__file__))
 df = pd.read_csv(os.path.join(HERE, "..", "data", "top_bottom_30", "counties_enriched_with_usda_data.csv"))
 
-axes_spec = [  # (label, column, log?)
-    ("Development\n(% developed)", "PERCENT_DEVELOPED", False),
-    ("Nature / Forest\n(% forest)", "PERCENT_FOREST", False),
-    ("Pop. density\n(log)", "POPULATION_DENSITY_2023_KM2", True),
-    ("Obs. density\n(log)", "GBIF_OBS_DENSITY_KM2", True),
-    ("Farmland within\n1 km of obs.", "PERCENTAGE_OF_AG_LAND_WITHIN_1KM_GBIF_OBS", False),
-    ("Industrial monoculture\n(corn acres, log)", "CORN_ACRES", True),
+axes_spec = [  # (label, column, log?) — clockwise from the top, as in the published Figure S3
+    ("Ind. Monoculture\n(corn acres)", "CORN_ACRES", False),
+    ("Ag Intensity\n(% land)", "PERCENT_AGRICULTURE", False),
+    ("Nature / Forest\n(% land)", "PERCENT_FOREST", False),
+    ("Crop Diversity\n(veg acres)", "VEGETABLE_ACRES", False),
+    ("Pop Density\n(log scale)", "POPULATION_DENSITY_2023_KM2", True),
+    ("Development\n(% land)", "PERCENT_DEVELOPED", False),
 ]
 X = np.column_stack([np.log10(df[c] + 1) if lg else df[c].astype(float) for _, c, lg in axes_spec])
 X = (X - X.min(0)) / (X.max(0) - X.min(0))

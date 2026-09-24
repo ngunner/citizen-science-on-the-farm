@@ -23,6 +23,6 @@ Illustrator. No script exists; the attribute table is the reproducible artefact.
 **Figure S3 caveat.** The published spider plot was made interactively; no script survived.
 `figS3_spider_plot.py` rebuilds it from the shipped data. The six axes follow the Figure S3 caption
 (development, forest, log population density, corn acres) plus log observation density and farmland
-coverage — check the last two against the published figure before reuse.
+— the same six axes as the published figure (development, corn acres, % agriculture, forest, vegetable acres, log population density).
 
 **Figure 1** is an illustration (Google Gemini-assisted) with no code. **Table S1** is qualitative.
