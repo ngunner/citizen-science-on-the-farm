@@ -6,7 +6,7 @@ version: 1.0.0
 date-released: 2026-09-09
 license: MIT
 repository-code: "https://github.com/ngunner/citizen-science-on-the-farm"
-# doi: 10.5281/zenodo.XXXXXXX   <- uncomment and fill in the CONCEPT DOI after the first Zenodo release
+url: "https://github.com/ngunner/citizen-science-on-the-farm/releases/tag/v1.0.0"
 abstract: >-
   Code and data by Nicholas Gunner accompanying the article by Nicholas Gunner, Yu Jiang, Kaitlin Gold,
   Sara Emery and Terence Bates (Cornell AgriTech, Cornell University). Scripts, intermediate tables and derived county-level data that reproduce the analysis of citizen-science

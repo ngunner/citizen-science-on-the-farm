@@ -39,7 +39,7 @@
       "scheme": "doi"
     }
   ],
-  "notes": "Version 1.0.0 accompanies the manuscript as submitted to Citizen Science: Theory and Practice (2026). After publication the article DOI will be added as an isSupplementTo relation.",
+  "notes": "Metadata kept so a Zenodo archive can be enabled later; the record of citation is the tagged GitHub release. Version 1.0.0 accompanies the manuscript as submitted to Citizen Science: Theory and Practice (2026).",
   "contributors": [
     {
       "name": "Jiang, Yu",
