@@ -1,0 +1,13 @@
+# R packages used for the 2023 county analysis (replication_package/01_county_analysis_2023)
+# Versions are those installed when the shipped results were last verified (R 4.4.1, 2026-09).
+R            4.4.1
+terra        1.8.54
+sf           1.0.21
+exactextractr 0.10.0
+arrow        19.0.1.1
+dplyr        1.1.4
+data.table   1.16.0
+readr        2.1.5
+doParallel   1.0.17
+foreach      1.5.2
+# install.packages(c("terra","sf","exactextractr","arrow","dplyr","data.table","readr","doParallel","foreach"))

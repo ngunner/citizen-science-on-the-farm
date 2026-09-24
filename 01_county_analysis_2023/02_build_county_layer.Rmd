@@ -1,0 +1,40 @@
+---
+title: "US County Socioeconomic Variables"
+output: html_notebook
+---
+<!--
+Provenance: copied from `Raw Data/US_Counties/US County Socioeconomics.Rmd` (last modified 2025-05-19) into the
+Citizen Science on the Farm replication package, September 2026.
+Edits at packaging: hard-coded machine paths/credentials removed; logic unchanged.
+Inputs: inputs/c_05mr24/ (NWS county shapefile) and inputs/ers/*.csv (USDA ERS county-level data).
+-->
+
+# Joining County Data with 
+
+```{r}
+csv_files <- list.files("Raw Socioeconomic Files", pattern = "\\.csv$", full.names = TRUE)
+
+library(sf)
+
+# Read the shapefile (adjust path if needed)
+counties_sf <- st_read("US Counties Boundaries/c_05mr24/c_05mr24.shp")
+
+# Ensure FIPS in shapefile is character
+counties_sf$FIPS <- as.character(counties_sf$FIPS)
+
+for (file in csv_files) {
+  name <- tools::file_path_sans_ext(basename(file))
+  df <- read.csv(file)
+  assign(name, df)
+  
+  # Standardize FIPS in CSV to always be 5 characters
+  df$FIPS <- sprintf("%05d", as.numeric(df$FIPS))
+
+  # Join the data
+  counties_sf <- merge(counties_sf, df, by = "FIPS", all.x = TRUE)
+}
+
+# st_write(counties_sf, "counties_with_data.geojson", driver = "GeoJSON")
+st_write(counties_sf, "US_Counties_SocioEconomics.gpkg", layer = "US_Counties_Data", delete_layer = TRUE)
+```
+

@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use this code or data, please cite it as below. Once the paper is published, please also cite the article."
+type: software
+title: "Replication code and data for: Citizen Science on the Farm — Shared Observational Effort is Lacking on Agricultural Lands"
+version: 1.0.0
+date-released: 2026-09-09
+license: MIT
+repository-code: "https://github.com/ngunner/citizen-science-on-the-farm"
+# doi: 10.5281/zenodo.XXXXXXX   <- uncomment and fill in the CONCEPT DOI after the first Zenodo release
+abstract: >-
+  Code and data by Nicholas Gunner accompanying the article by Nicholas Gunner, Yu Jiang, Kaitlin Gold,
+  Sara Emery and Terence Bates (Cornell AgriTech, Cornell University). Scripts, intermediate tables and derived county-level data that reproduce the analysis of citizen-science
+  observational effort on agricultural land in the conterminous United States: the 2023 county-level
+  observational disparity, 1 km coverage and Observational Effort Index (GBIF x USGS NLCD, county
+  socioeconomics from USDA ERS), the 2014-2024 disparity time series (GBIF Maps API x USGS Annual NLCD in
+  Google Earth Engine), and all script-generated figures.
+authors:
+  - family-names: Gunner
+    given-names: Nicholas
+    orcid: "https://orcid.org/0009-0005-5911-2124"
+    affiliation: "Horticulture Section, School of Integrative Plant Science, Cornell AgriTech, Cornell University, Geneva, NY, USA"
+keywords:
+  - citizen science
+  - GBIF
+  - agriculture
+  - biodiversity monitoring
+  - spatial bias
+  - National Land Cover Database
+  - Google Earth Engine
+  - observational effort
+  - agroecology
+  - United States

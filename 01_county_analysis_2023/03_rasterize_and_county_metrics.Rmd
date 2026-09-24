@@ -1,0 +1,871 @@
+---
+title: "County-Level Ag and Observation Analysis"
+output: html_notebook
+---
+<!--
+Provenance: copied from `Raw Data/Bridging Gaps Dataset/Bridging Gaps.Rmd` (last modified 2025-09-17) into the
+Citizen Science on the Farm replication package, September 2026.
+Edits at packaging: hard-coded machine paths/credentials removed; logic unchanged.
+Main 2023 notebook: ag_raster, obs_raster, exact_extract county metrics, coverage, socioeconomic GLM.
+-->
+# Import Libraries
+```{r}
+library(terra)
+library(sf)
+library(exactextractr)
+library(arrow)
+library(dplyr)
+```
+
+# Prepare base data
+```{r}
+# Counties (already transformed to EPSG:5070)
+counties_sf <- st_read("../US_Counties/US_Counties_SocioEconomics.gpkg",
+                       layer = "US_Counties_Data") %>%
+  st_transform(5070)
+
+# NLCD raster (already in 5070)
+nlcd <- rast("../NLCD2023/Annual_NLCD_LndCov_2023_CU_C1V0.tif")
+
+# Check
+print(nlcd)
+```
+# Create ag_raster (1 = ag, 0 = non-ag)
+```{r}
+# NLCD codes 81 and 82 = ag
+ag_raster <- classify(nlcd, cbind(c(81, 82), 1), others = 0)
+writeRaster(ag_raster, "../NLCD2023/ag_raster.tif", overwrite = TRUE)
+```
+
+# Initialize obs_raster
+```{r}
+library(terra)
+
+# Load previously created ag_raster
+ag_raster <- rast("../NLCD2023/ag_raster.tif")
+
+# Initialize empty obs_raster with same dimensions and CRS
+obs_raster <- rast(ag_raster)
+values(obs_raster) <- 0
+```
+
+# Splitt parquet
+```{r}
+library(arrow)
+library(dplyr)
+
+# Read the giant Parquet file
+gbif_big <- read_parquet("../GBIF_US_2023/GBIFUS2023.parquet")
+
+# Remove missing coordinates (optional but recommended BEFORE splitting)
+gbif_big <- gbif_big %>%
+  filter(!is.na(decimalLongitude) & !is.na(decimalLatitude))
+
+# How many total rows?
+total_rows <- nrow(gbif_big)
+
+# Batch settings
+batch_size <- 5e6
+num_batches <- ceiling(total_rows / batch_size)
+
+cat("Splitting into", num_batches, "files.\n")
+
+# Create folder for split files if it doesn't exist
+dir.create("../GBIF_US_2023/split/", showWarnings = FALSE, recursive = TRUE)
+
+# Write out multiple small Parquet files
+for (i in 1:num_batches) {
+  start <- (i - 1) * batch_size + 1
+  end <- min(i * batch_size, total_rows)
+
+  batch <- gbif_big[start:end, ]
+
+  filename <- paste0("../GBIF_US_2023/split/GBIF_batch_", i, ".parquet")
+  write_parquet(batch, filename)
+
+  cat("✅ Wrote", filename, "\n")
+}
+
+cat("✅✅ Splitting complete.\n")
+```
+
+# Create the obs_raster in batches
+```{r}
+# List all split Parquet files
+parquet_files <- list.files("../GBIF_US_2023/split/", pattern = "\\.parquet$", full.names = TRUE)
+
+cat("📂 Found", length(parquet_files), "batch files.\n")
+
+for (i in seq_along(parquet_files)) {
+
+  cat("🔎 Processing file", i, "of", length(parquet_files), ":", basename(parquet_files[i]), "\n")
+
+  # Read batch
+  batch <- read_parquet(parquet_files[i])
+
+  # Skip empty batch
+  if (nrow(batch) == 0) {
+    cat("⚠ Empty batch. Skipping.\n")
+    next
+  }
+
+  # Convert to terra vect directly (no sf!)
+  gbif_vect <- vect(cbind(batch$decimalLongitude, batch$decimalLatitude),
+                    type = "points", crs = "EPSG:4326")
+
+  # Reproject
+  gbif_vect <- project(gbif_vect, crs(ag_raster))
+
+  # Rasterize this batch
+  batch_raster <- rasterize(gbif_vect, ag_raster, fun = "count", background = 0)
+
+  # Add to the cumulative obs_raster
+  obs_raster <- obs_raster + batch_raster
+
+  cat("✅ Finished batch", i, "\n")
+}
+
+# Save final obs_raster
+writeRaster(obs_raster, "../NLCD2023/obs_raster.tif", overwrite = TRUE)
+cat("🎉 All batches complete. obs_raster saved.\n")
+```
+
+# Prepare data for Google Earth Engine
+```{r}
+library(arrow)
+
+# List all split Parquet files
+parquet_files <- list.files("../GBIF_US_2023/split/", pattern = "\\.parquet$", full.names = TRUE)
+
+# Loop through and save CSVs with just coords
+for (i in seq_along(parquet_files)) {
+
+  batch <- read_parquet(parquet_files[i])
+
+  # Drop missing coordinates
+  batch <- batch[!is.na(batch$decimalLongitude) & !is.na(batch$decimalLatitude), ]
+
+  # Keep just coords
+  coords <- batch[, c("decimalLongitude", "decimalLatitude")]
+
+  # Write CSV
+  filename <- paste0("../GBIF_US_2023/split/GBIF_batch_", i, ".csv")
+  write.csv(coords, filename, row.names = FALSE)
+
+  cat("✅ Wrote", filename, "\n")
+}
+```
+
+# Merge csv files
+```{r}
+library(data.table)
+
+# List all CSVs
+csv_files <- list.files("../GBIF_US_2023/split/", pattern = "\\.csv$", full.names = TRUE)
+
+# Read and rbind all CSVs quickly
+all_points <- rbindlist(lapply(csv_files, fread))
+
+# Confirm structure
+head(all_points)
+
+# Write the merged CSV
+fwrite(all_points, "../GBIF_US_2023/GBIF_ALL_POINTS.csv")
+
+cat("✅ Merged CSV saved as GBIF_ALL_POINTS.csv\n")
+```
+
+# Google Earth Engine Code
+// Load your uploaded GBIF observation raster
+var obs_raster = ee.Image("projects/nicholas-gunner/assets/obs_raster");
+
+// Create binary presence/absence
+var obs_binary = obs_raster.gt(0);
+
+// Distance to nearest observation
+var distance = obs_binary.fastDistanceTransform(30).sqrt().multiply(30);
+
+// Create binary 1km proximity raster
+var obs_1km = distance.lte(1000).selfMask();
+
+// Load NLCD 2021 (same grid as your ag_raster / NLCD 2023)
+var nlcd = ee.Image("USGS/NLCD_RELEASES/2021_REL/NLCD/2021").select('landcover');
+
+var projection = nlcd.projection();
+
+// --- Manually set CRS because .crs() fails ---
+var crs = 'EPSG:5070';
+
+// Extract transform (this still works fine)
+var transform = projection.getInfo().transform;
+
+// Get region
+var region = nlcd.geometry();
+
+// Export snapped to NLCD grid
+Export.image.toDrive({
+  image: obs_1km,
+  description: 'obs_1km_raster',
+  folder: 'EarthEngineExports',
+  scale: 30,
+  crs: crs,
+  crsTransform: transform,
+  region: region,
+  maxPixels: 1e13
+});
+
+
+# Merge Google Earth Engine 1km Buffer Tiffs
+```{r}
+library(terra)
+
+# List the exported TIFFs
+tif_files <- list.files("../obs_1km/", pattern = "\\.tif$", full.names = TRUE)
+
+# Read the rasters
+r_list <- lapply(tif_files, rast)
+
+# Merge them even if extents/alignments don't match
+obs_1km_raster <- do.call(merge, r_list)
+
+# Optional: save the unified raster
+writeRaster(obs_1km_raster, "obs_1km_raster_merged.tif", overwrite = TRUE)
+```
+
+# ANALYSIS!!
+
+```{r}
+library(terra)
+library(sf)
+library(dplyr)
+library(exactextractr)  # For efficient zonal stats
+
+# Load rasters
+ag_raster <- rast("ag_raster.tif")
+obs_raster <- rast("obs_raster.tif")
+obs_1km_raster <- rast("obs_1km_raster_merged.tif")
+crs(obs_1km_raster) <- crs(ag_raster)
+
+# Load counties
+counties_sf <- st_read("counties_with_data.geojson")
+
+# Ensure all data in same CRS
+crs_target <- crs(ag_raster)
+counties_sf <- st_transform(counties_sf, crs_target)
+
+# Check alignment
+stopifnot(all.equal(crs(obs_raster), crs(ag_raster)))
+stopifnot(all.equal(crs(obs_1km_raster), crs(ag_raster)))
+```
+## Ag areas and percentages of observation on ag calculations
+perc_ag_area
+% of county area classified as ag
+
+perc_obs_on_ag
+% of all GBIF observations in the county made on ag land
+
+```{r}
+# 1️ Percentage of county that is agricultural
+perc_ag_area <- exact_extract(ag_raster, counties_sf, 'mean', progress = TRUE)
+
+# 2️ Percentage of GBIF observations made on agricultural lands
+
+# To calculate:
+# - numerator = exact sum of obs_raster * ag_raster
+# - denominator = exact sum of obs_raster
+
+ag_obs_sum <- exact_extract(obs_raster * ag_raster, counties_sf, 'sum', progress = TRUE)
+total_obs_sum <- exact_extract(obs_raster, counties_sf, 'sum', progress = TRUE)
+
+perc_obs_on_ag <- ag_obs_sum / total_obs_sum
+```
+```{r}
+counties_sf$perc_ag_area <- perc_ag_area
+counties_sf$perc_obs_on_ag <- perc_obs_on_ag
+```
+
+## Coverage Calculations
+ag_observational_coverage
+% of ag land within 1km of any observation
+```{r}
+# 3️ Agricultural observational coverage (% of ag land *not* within 1km of obs → so 1 - coverage)
+# Ensure obs_1km_raster is aligned to ag_raster grid
+obs_1km_raster <- resample(obs_1km_raster, ag_raster, method = "near")
+# Mean of obs_1km_raster restricted to ag_raster
+obs_1km_ag_mean <- exact_extract(obs_1km_raster * ag_raster, counties_sf, 'mean', progress = TRUE)
+
+# Observational coverage = proportion of ag land within 1km of an observation
+ag_observational_coverage <- obs_1km_ag_mean
+```
+
+```{r}
+counties_sf$ag_observational_coverage <- ag_observational_coverage
+```
+
+## Write out final datasets
+
+```{r}
+st_write(counties_sf, "counties_with_final_metrics.geojson", delete_dsn = TRUE)
+```
+
+# Socioeconomic analysis
+
+```{r}
+str(counties_sf)
+```
+
+```{r}
+# Convert some variables to numbers
+counties_sf$POP_ESTIMATE_2023 <- as.numeric(gsub(",", "", counties_sf$POP_ESTIMATE_2023))
+counties_sf$Median_Household_Income_2022 <- as.numeric(gsub(",", "", counties_sf$Median_Household_Income_2022))
+```
+
+```{r}
+counties_sf$POP_ESTIMATE_2023 <- as.numeric(gsub(",", "", counties_sf$POP_ESTIMATE_2023))
+counties_sf$Median_Household_Income_2022 <- as.numeric(gsub(",", "", counties_sf$Median_Household_Income_2022))
+
+# Simple GLM
+model <- glm(
+  ag_observational_coverage ~ perc_ag_area + POP_ESTIMATE_2023 +
+    PCTPOVALL_2023 + Percent.of.adults.with.a.bachelor.s.degree.or.higher..2019.23 +
+    Unemployment_rate_2023 + Median_Household_Income_2022,
+  data = counties_sf,
+  family = quasibinomial()  # Because your response is a proportion between 0 and 1
+)
+
+summary(model)
+```
+```{r}
+library(car)
+
+vif_values <- vif(model)
+print(vif_values)
+```
+
+```{r}
+
+# Keep only complete cases used in the model
+counties_modeldata <- counties_sf %>%
+  filter(
+    !is.na(perc_ag_area) &
+    !is.na(POP_ESTIMATE_2023) &
+    !is.na(PCTPOVALL_2023) &
+    !is.na(Percent.of.adults.with.a.bachelor.s.degree.or.higher..2019.23) &
+    !is.na(Unemployment_rate_2023) &
+    !is.na(Median_Household_Income_2022) &
+    !is.na(ag_observational_coverage)
+  )
+
+model <- glm(
+  ag_observational_coverage ~ perc_ag_area + POP_ESTIMATE_2023 +
+    PCTPOVALL_2023 + Percent.of.adults.with.a.bachelor.s.degree.or.higher..2019.23 +
+    Unemployment_rate_2023 + Median_Household_Income_2022,
+  data = counties_modeldata,
+  family = quasibinomial()
+)
+
+counties_modeldata$predicted <- predict(model, type = "response")
+
+plot(
+  counties_modeldata$ag_observational_coverage,
+  counties_modeldata$predicted,
+  xlab = "Observed Coverage",
+  ylab = "Predicted Coverage",
+  main = "Observed vs Predicted Coverage",
+  pch = 20,
+  col = "blue"
+)
+abline(0, 1, col = "red")
+```
+```{r}
+null_dev <- model$null.deviance
+resid_dev <- model$deviance
+
+pseudo_r2 <- 1 - (resid_dev / null_dev)
+pseudo_r2
+```
+
+```{r}
+cor(counties_modeldata$ag_observational_coverage, counties_modeldata$predicted)^2
+```
+```{r}
+counties_modeldata$area_km2 <- st_area(counties_modeldata) / 1e6  # Convert from m² to km²
+counties_modeldata$area_km2 <- as.numeric(counties_modeldata$area_km2)  # Ensure numeric
+
+counties_modeldata$POP_DENSITY <- counties_modeldata$POP_ESTIMATE_2023 / counties_modeldata$area_km2
+
+summary(counties_modeldata$POP_DENSITY)
+
+counties_modeldata$LOG_POP_DENSITY <- log1p(counties_modeldata$POP_DENSITY)  # log(1 + x)
+
+model2 <- glm(
+  ag_observational_coverage ~ perc_ag_area + LOG_POP_DENSITY +
+    PCTPOVALL_2023 + Percent.of.adults.with.a.bachelor.s.degree.or.higher..2019.23 +
+    Unemployment_rate_2023,
+  data = counties_modeldata,
+  family = quasibinomial()
+)
+
+summary(model2)
+
+counties_modeldata$predicted <- predict(model2, type = "response")
+
+plot(
+  counties_modeldata$ag_observational_coverage,
+  counties_modeldata$predicted,
+  xlab = "Observed Coverage",
+  ylab = "Predicted Coverage",
+  main = "Observed vs Predicted Coverage",
+  pch = 20,
+  col = "blue"
+)
+abline(0, 1, col = "red")
+
+null_dev <- model2$null.deviance
+resid_dev <- model2$deviance
+
+pseudo_r2 <- 1 - (resid_dev / null_dev)
+pseudo_r2
+```
+```{r}
+observational_disparity <- counties_modeldata_ag5$perc_obs_on_ag / counties_modeldata_ag5$perc_ag_area
+counties_modeldata_ag5$observational_disparity <- counties_modeldata_ag5$perc_obs_on_ag / counties_modeldata_ag5$perc_ag_area
+
+counties_modeldata_ag5 <- counties_modeldata_ag5 %>%
+  mutate(
+    observational_disparity = ifelse(perc_ag_area > 0 & perc_obs_on_ag > 0,
+                                     perc_obs_on_ag / perc_ag_area,
+                                     NA)
+  )
+
+counties_modeldata_ag5 <- counties_modeldata %>%
+  filter(perc_ag_area > 0.05)
+
+nrow(counties_modeldata_ag5)
+
+model_ag5 <- glm(
+  observational_disparity ~ perc_ag_area + LOG_POP_DENSITY +
+    PCTPOVALL_2023 +
+    Unemployment_rate_2023,
+  data = counties_modeldata_ag5,
+  family = gaussian()
+)
+
+summary(model_ag5)
+
+null_dev <- model_ag5$null.deviance
+resid_dev <- model_ag5$deviance
+
+pseudo_r2_ag5 <- 1 - (resid_dev / null_dev)
+pseudo_r2_ag5
+
+counties_modeldata_ag5$predicted <- NA
+counties_modeldata_ag5$predicted[complete.cases(counties_modeldata_ag5[, c(
+  "perc_ag_area", "LOG_POP_DENSITY", "PCTPOVALL_2023",
+  "Unemployment_rate_2023", "observational_disparity"
+)])] <- predict(model_ag5, type = "response")
+
+plot(
+  counties_modeldata_ag5$observational_disparity,
+  counties_modeldata_ag5$predicted,
+  xlab = "Observed Disparity",
+  ylab = "Predicted Disparity",
+  main = "Observed vs Predicted Observational Disparity (Ag >5%)",
+  pch = 20,
+  col = "darkgreen"
+)
+abline(0, 1, col = "red")
+
+vif(model_ag5)
+
+library(boot)
+cv_error_ag5 <- cv.glm(counties_modeldata_ag5, model_ag5, K = 10)$delta[1]
+cv_error_ag5
+```
+
+```{r}
+# Install and load the sf package if you haven't already
+install.packages("sf")
+library(sf)
+
+# Read the GeoJSON file (local or URL)
+geojson_path <- "counties_with_final_metrics.geojson"
+geo_data <- st_read(geojson_path)
+
+# View the data
+print(geo_data)
+
+# Drop the geometry column and create a new data frame
+non_spatial_df <- st_drop_geometry(geo_data)
+
+# View the result
+head(non_spatial_df)
+```
+```{r}
+library(dplyr)
+
+non_spatial_df <- non_spatial_df %>%
+  rename(
+    MEDIAN_HOUSEHOLD_INCOME_STATE_NORMALIZED = Med_HH_Income_Percent_of_State_Total_2022
+  )
+```
+```{r}
+# Remove one or more columns by name
+non_spatial_df <- non_spatial_df %>%
+  select(-ag_observational_coverage)
+```
+```{r}
+sapply(non_spatial_df, typeof)
+```
+
+```{r}
+non_spatial_df <- non_spatial_df %>%
+  mutate(
+    POP_ESTIMATE = as.numeric(gsub(",", "", POP_ESTIMATE))
+  )
+```
+```{r}
+continental_states <- c(
+  "AL","AZ","AR","CA","CO","CT","DE","FL","GA","ID","IL","IN","IA",
+  "KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV",
+  "NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD",
+  "TN","TX","UT","VT","VA","WA","WV","WI","WY"
+)
+
+library(dplyr)
+
+non_spatial_df_contus <- non_spatial_df %>%
+  filter(STATE %in% continental_states)
+```
+
+```{r}
+non_spatial_df <- non_spatial_df %>%
+  mutate(
+    OBS_DISPARITY = ifelse(!is.na(PERC_AG_AREA) & PERC_AG_AREA > 0,
+                           PERC_OBS_ON_AG / PERC_AG_AREA,
+                           NA)
+  )
+write.csv(non_spatial_df, "us_counties_ag_observations.csv", row.names = FALSE)
+```
+
+```{r}
+library(dplyr)
+
+non_spatial_df_nona <- non_spatial_df %>%
+  filter(!is.na(OBS_DISPARITY))
+
+write.csv(non_spatial_df_nona, "us_counties_ag_observations.csv", row.names = FALSE)
+```
+
+# Create County Dataset with Area and Observation Count
+
+## Load Required Libraries and Data
+
+```{r}
+# Load required libraries
+library(terra)
+library(sf)
+library(dplyr)
+library(exactextractr)
+library(arrow)
+
+# Load counties data
+cat("Loading counties data...\n")
+counties_sf <- st_read("../US_Counties/US_Counties_SocioEconomics.gpkg",
+                       layer = "US_Counties_Data") %>%
+  st_transform(5070)
+
+# Load observation raster
+cat("Loading observation raster...\n")
+obs_raster <- rast("../NLCD2023/obs_raster.tif")
+
+# Ensure counties are in the same CRS as the raster
+counties_sf <- st_transform(counties_sf, crs(obs_raster))
+
+cat("Data loaded successfully.\n")
+```
+
+## Calculate County Areas and Observation Counts
+
+```{r}
+# Calculate county areas
+cat("Calculating county areas...\n")
+counties_sf$area_m2 <- st_area(counties_sf)
+counties_sf$area_km2 <- as.numeric(counties_sf$area_m2) / 1e6  # Convert to km²
+counties_sf$area_ha <- as.numeric(counties_sf$area_m2) / 1e4   # Convert to hectares
+
+# Calculate total observation count per county
+cat("Calculating observation counts per county...\n")
+obs_count <- exact_extract(obs_raster, counties_sf, 'sum', progress = TRUE)
+counties_sf$total_obs_count <- obs_count
+
+# Calculate observation density (observations per km²)
+counties_sf$obs_density_km2 <- counties_sf$total_obs_count / counties_sf$area_km2
+
+# Display summary statistics
+cat("\nSummary Statistics:\n")
+cat("Number of counties:", nrow(counties_sf), "\n")
+cat("Total area (km²):", sum(counties_sf$area_km2, na.rm = TRUE), "\n")
+cat("Total observations:", sum(counties_sf$total_obs_count, na.rm = TRUE), "\n")
+cat("Mean county area (km²):", mean(counties_sf$area_km2, na.rm = TRUE), "\n")
+cat("Mean observations per county:", mean(counties_sf$total_obs_count, na.rm = TRUE), "\n")
+cat("Mean observation density (obs/km²):", mean(counties_sf$obs_density_km2, na.rm = TRUE), "\n")
+```
+
+## Create and Preview Dataset
+
+```{r}
+# Create a simplified dataset with area and observation metrics
+county_area_obs_data <- counties_sf %>%
+  select(
+    FIPS,
+    STATE,
+    COUNTYNAME,
+    area_km2,
+    area_ha,
+    total_obs_count,
+    obs_density_km2,
+    geometry
+  )
+
+# Display first few rows
+cat("\nFirst 10 counties with area and observation data:\n")
+print(head(st_drop_geometry(county_area_obs_data), 10))
+```
+
+## Save Dataset in Multiple Formats
+
+```{r}
+# Save the new county dataset with area and observation count
+# Save as CSV (non-spatial)
+county_area_obs_csv <- st_drop_geometry(county_area_obs_data)
+write.csv(county_area_obs_csv, "county_area_obs_data.csv", row.names = FALSE)
+cat("✅ Saved county_area_obs_data.csv\n")
+
+# Save as GeoJSON (spatial)
+st_write(county_area_obs_data, "county_area_obs_data.geojson", delete_dsn = TRUE)
+cat("✅ Saved county_area_obs_data.geojson\n")
+
+# Save as Parquet for efficient storage
+write_parquet(county_area_obs_csv, "county_area_obs_data.parquet")
+cat("✅ Saved county_area_obs_data.parquet\n")
+
+cat("\n🎉 County dataset with area and observation count created successfully!\n")
+cat("Files created:\n")
+cat("- county_area_obs_data.csv (CSV format)\n")
+cat("- county_area_obs_data.geojson (GeoJSON format)\n")
+cat("- county_area_obs_data.parquet (Parquet format)\n")
+```
+
+```{r}
+# Optimized script to calculate land cover percentages by county from NLCD 2023 data
+# Author: AI Assistant
+# Date: Generated for land cover analysis
+# Approach: Memory-efficient processing with multi-threading
+
+# Load required libraries
+library(terra)
+library(sf)
+library(dplyr)
+library(parallel)
+library(doParallel)
+library(foreach)
+
+# Set working directory
+# Load the NLCD 2023 raster
+cat("Loading NLCD 2023 raster...\n")
+nlcd <- rast("../NLCD2023/Annual_NLCD_LndCov_2023_CU_C1V0.tif")
+
+# Load counties data
+cat("Loading counties data...\n")
+counties_sf <- st_read("../US_Counties/US_Counties_SocioEconomics.gpkg",
+                       layer = "US_Counties_Data") %>%
+  st_transform(crs(nlcd))
+
+cat("Counties loaded:", nrow(counties_sf), "\n")
+
+# Memory-efficient function to analyze land cover for a single county
+analyze_county_landcover_optimized <- function(county_index, counties_sf, nlcd_path) {
+  # Load the county and raster fresh in each worker
+  county <- counties_sf[county_index, ]
+  fips <- county$FIPS
+  
+  tryCatch({
+    # Load raster fresh to avoid memory issues
+    nlcd_raster <- rast(nlcd_path)
+    
+    # Crop the NLCD raster to the county extent
+    county_nlcd <- crop(nlcd_raster, county)
+    
+    # Mask to the county boundary
+    county_nlcd <- mask(county_nlcd, county)
+    
+    # Get all values in the county
+    values <- values(county_nlcd)
+    values <- values[!is.na(values)]
+    
+    # Clean up memory
+    rm(county_nlcd)
+    gc()
+    
+    if (length(values) == 0) {
+      return(data.frame(
+        FIPS = fips,
+        PERCENT_DEVELOPED = NA,
+        PERCENT_FOREST = NA,
+        PERCENT_WATER = NA,
+        TOTAL_PIXELS = 0
+      ))
+    }
+    
+    # Calculate percentages
+    total_pixels <- length(values)
+    
+    # Developed land (codes 21-24)
+    developed_pixels <- sum(values %in% c(21, 22, 23, 24))
+    percent_developed <- developed_pixels / total_pixels
+    
+    # Forest land (codes 41-43)
+    forest_pixels <- sum(values %in% c(41, 42, 43))
+    percent_forest <- forest_pixels / total_pixels
+    
+    # Water (code 11)
+    water_pixels <- sum(values == 11)
+    percent_water <- water_pixels / total_pixels
+    
+    return(data.frame(
+      FIPS = fips,
+      PERCENT_DEVELOPED = percent_developed,
+      PERCENT_FOREST = percent_forest,
+      PERCENT_WATER = percent_water,
+      TOTAL_PIXELS = total_pixels
+    ))
+    
+  }, error = function(e) {
+    cat("Error processing county", fips, ":", e$message, "\n")
+    return(data.frame(
+      FIPS = fips,
+      PERCENT_DEVELOPED = NA,
+      PERCENT_FOREST = NA,
+      PERCENT_WATER = NA,
+      TOTAL_PIXELS = 0
+    ))
+  })
+}
+
+# Set up parallel processing
+cat("Setting up parallel processing...\n")
+n_cores <- min(detectCores() - 1, 6)  # Conservative core usage
+cat("Using", n_cores, "cores for parallel processing\n")
+
+# Register parallel backend
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+# Export necessary objects to workers
+clusterExport(cl, c("counties_sf"), envir = environment())
+
+# Get number of counties
+n_counties <- nrow(counties_sf)
+cat("Processing", n_counties, "counties in parallel...\n")
+
+# Process counties in parallel with progress tracking
+cat("Starting parallel processing...\n")
+start_time <- Sys.time()
+
+# Process in smaller chunks for better memory management
+chunk_size <- max(1, floor(n_counties / (n_cores * 2)))
+chunks <- split(1:n_counties, ceiling(seq_along(1:n_counties) / chunk_size))
+
+cat("Processing", length(chunks), "chunks of approximately", chunk_size, "counties each\n")
+
+all_results <- list()
+for (chunk_idx in 1:length(chunks)) {
+  chunk_indices <- chunks[[chunk_idx]]
+  cat("Processing chunk", chunk_idx, "of", length(chunks), 
+      "(", length(chunk_indices), "counties)...\n")
+  
+  chunk_results <- foreach(i = chunk_indices, 
+                         .combine = rbind,
+                         .packages = c("terra", "sf"),
+                         .errorhandling = "pass") %dopar% {
+    analyze_county_landcover_optimized(i, counties_sf, "../NLCD2023/Annual_NLCD_LndCov_2023_CU_C1V0.tif")
+  }
+  
+  all_results[[chunk_idx]] <- chunk_results
+  
+  # Force garbage collection between chunks
+  gc()
+}
+
+# Combine all results
+results <- do.call(rbind, all_results)
+
+# Stop parallel cluster
+stopCluster(cl)
+
+end_time <- Sys.time()
+processing_time <- end_time - start_time
+cat("Parallel processing completed in", round(as.numeric(processing_time, units = "mins"), 2), "minutes\n")
+
+# Check results
+cat("Results summary:\n")
+cat("Successfully processed:", sum(!is.na(results$PERCENT_DEVELOPED)), "counties\n")
+cat("Failed to process:", sum(is.na(results$PERCENT_DEVELOPED)), "counties\n")
+
+# Add the new columns to the counties data
+counties_sf$PERCENT_DEVELOPED <- results$PERCENT_DEVELOPED
+counties_sf$PERCENT_FOREST <- results$PERCENT_FOREST  
+counties_sf$PERCENT_WATER <- results$PERCENT_WATER
+
+# Display summary statistics
+cat("\nLand Cover Summary Statistics:\n")
+cat("Mean % developed:", round(mean(results$PERCENT_DEVELOPED, na.rm = TRUE) * 100, 2), "%\n")
+cat("Mean % forest:", round(mean(results$PERCENT_FOREST, na.rm = TRUE) * 100, 2), "%\n")
+cat("Mean % water:", round(mean(results$PERCENT_WATER, na.rm = TRUE) * 100, 2), "%\n")
+
+# Show some examples
+cat("\nFirst 10 counties with land cover percentages:\n")
+example_data <- counties_sf %>%
+  select(FIPS, STATE, COUNTYNAME, PERCENT_DEVELOPED, PERCENT_FOREST, PERCENT_WATER) %>%
+  st_drop_geometry() %>%
+  head(10)
+
+print(example_data)
+
+# Save the updated counties data
+cat("\nSaving updated counties data...\n")
+st_write(counties_sf, "counties_with_landcover_optimized.geojson", delete_dsn = TRUE)
+
+# Also create a CSV version for easy merging
+counties_csv <- counties_sf %>%
+  select(FIPS, STATE, COUNTYNAME, PERCENT_DEVELOPED, PERCENT_FOREST, PERCENT_WATER) %>%
+  st_drop_geometry()
+
+write.csv(counties_csv, "counties_landcover_percentages_optimized.csv", row.names = FALSE)
+
+cat("✅ Analysis complete!\n")
+cat("Files created:\n")
+cat("- counties_with_landcover_optimized.geojson (spatial data with land cover percentages)\n")
+cat("- counties_landcover_percentages_optimized.csv (CSV for merging)\n")
+
+# Display summary by state
+cat("\nLand cover summary by state (top 10 by mean % developed):\n")
+state_summary <- counties_sf %>%
+  st_drop_geometry() %>%
+  group_by(STATE) %>%
+  summarise(
+    mean_developed = mean(PERCENT_DEVELOPED, na.rm = TRUE) * 100,
+    mean_forest = mean(PERCENT_FOREST, na.rm = TRUE) * 100,
+    mean_water = mean(PERCENT_WATER, na.rm = TRUE) * 100,
+    n_counties = n(),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(mean_developed)) %>%
+  head(10)
+
+print(state_summary)
+
+
+```
+

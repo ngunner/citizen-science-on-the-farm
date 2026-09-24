@@ -1,0 +1,69 @@
+{
+  "title": "Replication code and data for: Citizen Science on the Farm — Shared Observational Effort is Lacking on Agricultural Lands",
+  "upload_type": "software",
+  "description": "<p>Scripts, intermediate tables and derived county-level data that reproduce the analysis in <em>Citizen Science on the Farm: Shared Observational Effort is Lacking on Agricultural Lands</em> (Nicholas Gunner, Yu Jiang, Kaitlin Gold, Sara Emery &amp; Terence Bates; Cornell AgriTech, Cornell University). Analysis code and data were produced by Nicholas Gunner; the article co-authors are listed as contributors.</p><p>Contents: (1) the 2023 county-level analysis of citizen-science observational disparity, 1&nbsp;km observational coverage and the Observational Effort Index, built from a GBIF human-observation download (DOI 10.15468/dl.5h7by2), the USGS Annual NLCD 2023 land cover, NWS county boundaries and USDA ERS county socioeconomic data; (2) the Earth Engine scripts for the 1&nbsp;km coverage map; (3) a self-contained GBIF Maps API &times; USGS Annual NLCD pipeline for the 2014&ndash;2024 disparity time series; (4) figure scripts; (5) the final county dataset for 3,108 CONUS counties (CSV and GeoJSON). Large raw inputs are not included; their DOIs, filters and retrieval dates are documented in <code>data/DATA_SOURCES.md</code>.</p><p>Code: MIT licence. Derived data and figures: CC BY 4.0.</p>",
+  "creators": [
+    {
+      "name": "Gunner, Nicholas",
+      "affiliation": "Horticulture Section, School of Integrative Plant Science, Cornell AgriTech, Cornell University",
+      "orcid": "0009-0005-5911-2124"
+    }
+  ],
+  "keywords": [
+    "citizen science",
+    "GBIF",
+    "agriculture",
+    "biodiversity monitoring",
+    "spatial bias",
+    "National Land Cover Database",
+    "Google Earth Engine",
+    "observational effort",
+    "agroecology",
+    "United States"
+  ],
+  "license": "MIT",
+  "access_right": "open",
+  "version": "1.0.0",
+  "language": "eng",
+  "related_identifiers": [
+    {
+      "identifier": "10.15468/dl.5h7by2",
+      "relation": "isDerivedFrom",
+      "resource_type": "dataset",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "10.5066/P94UXNTS",
+      "relation": "isDerivedFrom",
+      "resource_type": "dataset",
+      "scheme": "doi"
+    }
+  ],
+  "notes": "Version 1.0.0 accompanies the manuscript as submitted to Citizen Science: Theory and Practice (2026). After publication the article DOI will be added as an isSupplementTo relation.",
+  "contributors": [
+    {
+      "name": "Jiang, Yu",
+      "type": "Researcher",
+      "affiliation": "Horticulture Section, School of Integrative Plant Science, Cornell AgriTech, Cornell University",
+      "orcid": "0000-0003-4495-3033"
+    },
+    {
+      "name": "Gold, Kaitlin",
+      "type": "Researcher",
+      "affiliation": "Plant Pathology and Plant-Microbe Biology Section, School of Integrative Plant Science, Cornell AgriTech, Cornell University",
+      "orcid": "0000-0002-0306-9244"
+    },
+    {
+      "name": "Emery, Sara",
+      "type": "Researcher",
+      "affiliation": "Department of Entomology, Cornell AgriTech, Cornell University",
+      "orcid": "0000-0002-0832-0506"
+    },
+    {
+      "name": "Bates, Terence",
+      "type": "Researcher",
+      "affiliation": "Horticulture Section, School of Integrative Plant Science, Cornell AgriTech, Cornell University",
+      "orcid": "0000-0002-6719-9435"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+data/CONUS_COUNTIES_WITH_METRICS_recomputed.csv
+04_figures/*.png
+04_figures/*.pdf
+03_disparity_trend_2014_2024/_pointmethod_ckpt/

@@ -1,0 +1,77 @@
+---
+title: "GBIF Conversion"
+output: html_notebook
+---
+<!--
+Provenance: copied from `Raw Data/GBIF_US_2023/GBIF Conversion.Rmd` (last modified 2025-05-06) into the
+Citizen Science on the Farm replication package, September 2026.
+Edits at packaging: hard-coded machine paths/credentials removed; logic unchanged.
+Input: the GBIF occurrence download (DOI 10.15468/dl.5h7by2) unzipped to a tab-separated CSV.
+-->
+```{r}
+library(data.table)
+
+# Read only the header (no data)
+header <- fread("0010290-250426092105405.csv", sep = "\t", nrows = 0)
+
+# Show all column names
+names(header)
+```
+
+```{r}
+library(data.table)
+library(arrow)
+
+# Step 1: Specify the GBIF CSV file path
+gbif_file <- "0010290-250426092105405.csv"
+
+# Step 2: Define which columns you actually need to extract land cover later
+# (Modify this list to include any other fields you care about!)
+wanted_cols <- c("decimalLongitude", "decimalLatitude")
+
+# Step 3: Read the header only to check available columns
+header <- fread(gbif_file, sep = "\t", nrows = 0)
+available_cols <- names(header)
+
+# Check which requested columns actually exist
+missing_cols <- setdiff(wanted_cols, available_cols)
+if(length(missing_cols) > 0) {
+  stop(paste("These columns are missing from the file:", paste(missing_cols, collapse = ", ")))
+}
+
+# Step 4: Read *only the columns you need* (very efficient!)
+big_csv <- fread(
+  gbif_file,
+  sep = "\t",
+  select = wanted_cols,
+  showProgress = TRUE
+)
+
+# Step 5: Optional sanity check — peek at first few rows
+print(head(big_csv))
+
+# Step 6: Write as Parquet (fast + compressed)
+write_parquet(big_csv, "GBIFUS2023.parquet")
+
+cat("✅ Parquet file created: GBIFUS2023.parquet\n")
+```
+# Convert parquet to SF
+```{r}
+library(arrow)
+library(sf)
+
+# Step 1: Read GBIF data
+gbif_data <- read_parquet("GBIFUS2023.parquet")
+
+# Step 2: Remove NAs (do this BEFORE sf conversion to minimize size)
+gbif_data <- gbif_data[!is.na(gbif_data$decimalLongitude) & !is.na(gbif_data$decimalLatitude), ]
+
+# Check how many rows (should be ~133 million minus missing coords)
+cat("Number of points after removing NAs:", nrow(gbif_data), "\n")
+
+# Step 3: Try sf conversion ONLY
+gbif_sf <- st_as_sf(gbif_data, coords = c("decimalLongitude", "decimalLatitude"), crs = 4326)
+
+cat("✅ Successfully converted to sf. Number of points:", nrow(gbif_sf), "\n")
+```
+
