@@ -1,9 +1,9 @@
-# Citizen Science on the Farm — replication code and data
+# Participatory Science on the Farm — replication code and data
 
 [![Release](https://img.shields.io/github/v/release/ngunner/citizen-science-on-the-farm)](https://github.com/ngunner/citizen-science-on-the-farm/releases)
 [![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE) [![Data: CC BY 4.0](https://img.shields.io/badge/data%20%26%20figures-CC%20BY%204.0-lightblue.svg)](LICENSE)
 
-Replication package for ***Citizen Science on the Farm: Shared Observational Effort is Lacking on Agricultural Lands***
+Replication package for ***Participatory Science on the Farm: Shared Observational Effort is Lacking on Agricultural Lands***
 
 Nicholas Gunner, Yu Jiang, Kaitlin Gold, Sara Emery & Terence Bates (Cornell AgriTech, Cornell University). Manuscript submitted to *Citizen Science: Theory and Practice*, 2026.
 
@@ -121,7 +121,7 @@ dataset); NLCD, NWS and USDA ERS/NASS data are U.S. Government public domain.
 
 Software/data (this repository, tagged release v1.0.0 — see `CITATION.cff`):
 
-> Gunner, N. (2026). *Replication code and data for: Citizen Science on the Farm — Shared Observational Effort is Lacking on Agricultural Lands* (Version 1.0.0) [Computer software]. GitHub. https://github.com/ngunner/citizen-science-on-the-farm
+> Gunner, N. (2026). *Replication code and data for: Participatory Science on the Farm — Shared Observational Effort is Lacking on Agricultural Lands* (Version 1.0.0) [Computer software]. GitHub. https://github.com/ngunner/citizen-science-on-the-farm
 
 Primary data (cite alongside): GBIF.org (2025) occurrence download https://doi.org/10.15468/dl.5h7by2 · U.S. Geological Survey (2024) Annual NLCD Collection 1 https://doi.org/10.5066/P94UXNTS — full list in `data/DATA_SOURCES.md`.
 
