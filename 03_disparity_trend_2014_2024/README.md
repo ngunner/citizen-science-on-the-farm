@@ -1,4 +1,4 @@
-# Replication — Citizen Science on the Farm (2023 analysis + disparity over time)
+# Replication — Participatory Science on the Farm (2023 analysis + disparity over time)
 
 A small, step-through set of scripts that regenerate the paper's findings. The single-year
 scripts (01–04) run in the cloud (Google Earth Engine + the GBIF Maps API); the decade series
