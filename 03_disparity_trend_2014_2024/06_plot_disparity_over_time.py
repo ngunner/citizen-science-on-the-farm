@@ -75,9 +75,9 @@ ax.set_title(f'The farmland observational disparity is widening ({years[0]}–{y
              f'{disp[0]:.2f}× → {max(disp):.2f}×, measured by exact point classification '
              f'against 30 m NLCD farmland', fontsize=11)
 fig.tight_layout()
-fig.savefig('outputs/disparity_over_time.png', dpi=200, bbox_inches='tight')
+fig.savefig('outputs/disparity_over_time.png', dpi=300, bbox_inches='tight')
 if os.path.isdir('../figures'):
-    fig.savefig('../figures/disparity_over_time.png', dpi=200, bbox_inches='tight')
+    fig.savefig('../figures/disparity_over_time.png', dpi=300, bbox_inches='tight')
 
 print("Exact-point (30 m) disparity by year:")
 for yr, dis, pobs, om in rows:
