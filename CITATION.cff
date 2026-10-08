@@ -8,8 +8,8 @@ license: MIT
 repository-code: "https://github.com/ngunner/citizen-science-on-the-farm"
 url: "https://github.com/ngunner/citizen-science-on-the-farm/releases/tag/v1.0.0"
 abstract: >-
-  Code and data by Nicholas Gunner accompanying the article by Nicholas Gunner, Yu Jiang, Kaitlin Gold,
-  Sara Emery and Terence Bates (Cornell AgriTech, Cornell University). Scripts, intermediate tables and derived county-level data that reproduce the analysis of citizen-science
+  Code and data by Nicholas Gunner accompanying the article by Nicholas Gunner, Sara Emery, Kaitlin Gold,
+  Terence Bates and Yu Jiang (Cornell AgriTech, Cornell University). Scripts, intermediate tables and derived county-level data that reproduce the analysis of citizen-science
   observational effort on agricultural land in the conterminous United States: the 2023 county-level
   observational disparity, 1 km coverage and Observational Effort Index (GBIF x USGS NLCD, county
   socioeconomics from USDA ERS), the 2014-2024 disparity time series (GBIF Maps API x USGS Annual NLCD in

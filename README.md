@@ -5,7 +5,7 @@
 
 Replication package for ***Participatory Science on the Farm: Shared Observational Effort is Lacking on Agricultural Lands***
 
-Nicholas Gunner, Yu Jiang, Kaitlin Gold, Sara Emery & Terence Bates (Cornell AgriTech, Cornell University). Manuscript submitted to *Citizen Science: Theory and Practice*, 2026.
+Nicholas Gunner, Sara Emery, Kaitlin Gold, Terence Bates & Yu Jiang (Cornell AgriTech, Cornell University). Manuscript submitted to *Citizen Science: Theory and Practice*, 2026.
 
 This package contains every script, intermediate table, and derived dataset needed to regenerate the
 manuscript's results: the 2023 county-level analysis (observational disparity, 1 km coverage, and the
