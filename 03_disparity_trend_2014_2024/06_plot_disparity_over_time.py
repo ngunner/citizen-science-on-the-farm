@@ -76,6 +76,9 @@ ax.set_title(f'The farmland observational disparity is widening ({years[0]}–{y
              f'against 30 m NLCD farmland', fontsize=11)
 fig.tight_layout()
 fig.savefig('outputs/disparity_over_time.png', dpi=300, bbox_inches='tight')
+for ext in ('pdf', 'svg'):                                              # editable vector versions
+    fig.savefig(f'outputs/disparity_over_time.{ext}', bbox_inches='tight')
+    if os.path.isdir('../figures'): fig.savefig(f'../figures/disparity_over_time.{ext}', bbox_inches='tight')
 if os.path.isdir('../figures'):
     fig.savefig('../figures/disparity_over_time.png', dpi=300, bbox_inches='tight')
 

@@ -48,4 +48,5 @@ ax.legend(loc="upper right", bbox_to_anchor=(1.35, 1.12), fontsize=9, frameon=Fa
 ax.set_title("Top 30 vs Bottom 30 OEI counties — multivariable profiles\n(min–max scaled across the 60 counties)", fontsize=11, pad=24)
 out = os.path.join(HERE, "..", "figures", "figS3_spider_plot_reconstructed.png")
 fig.savefig(out, dpi=200, bbox_inches="tight")
+for ext in ("pdf", "svg"): fig.savefig(out.replace(".png", f".{ext}"), bbox_inches="tight")
 print("wrote", out)
